@@ -1,42 +1,181 @@
-# Pokémon TCG Data
+# Pokémon TCG Data – Controlled Fork
 
-[![Discord](https://img.shields.io/badge/Pokémon%20TCG%20Developers-%237289DA.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/dpsTCvg)
-[![Patreon](https://img.shields.io/badge/Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/bePatron?u=8336557)
-[![Ko-Fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/Z8Z25AVR)
+This repository is a **controlled fork** of the upstream Pokémon TCG data repository.
 
+Its purpose is to:
 
-This is the data found within the [Pokémon TCG API](https://pokemontcg.io/). Currently, the raw JSON files for all the card information can be found here.
+* Track upstream data precisely
+* Retain fork-owned documentation and tooling
+* Provide **predictable, auditable updates** for downstream consumers (devices, services, CI)
 
-If you find this data useful, consider donating via one of the links above. All donations are greatly appreciated!
+---
 
-# Downloading the data
+## Fork invariants (very important)
 
-The easiest way to stay up to date and interact with the data is via the [Pokémon TCG API](http://pokemontcg.io/) and one of the associated SDKs. Otherwise, feel free to clone this repository or download a zip from the releases.
-
-# Version 1 and 2 Data
-
-Version 1 data is no longer being maintained. The API for V1 will continue to receive new sets until August 1st, 2021. At this time, V1 of the API will be taken offline, and you MUST be using V2. You have a 6 month window to migrate to V2.
-
-If you rely on the V1 data, I have provided a `v2_to_v1.rb` Ruby script that you can run to generate all the json files in v1 format.
-
-To install Ruby: https://www.ruby-lang.org/en/documentation/installation/
-
-You will also need the `json` gem: `gem install json`.
-
-Finally, to run the script:
+After **every** upstream sync, the repository must satisfy:
 
 ```
-ruby v2_to_v1.rb
+main = upstream/<commit>
+     + README.md        (fork-owned)
+     + sync_upstream.sh    (fork-owned)
 ```
 
-This will output all of the card data into `/cards/en/v1`.
+Everything except these two files must match upstream **exactly**.
 
-# Contributing
+---
 
-Please contribute when you see missing and/or incorrect data. I'll try to review all pull requests relatively quickly so that I can push updates at night.
+## Branch model
 
-1. Fork it ( https://github.com/[my-github-username]/pokemon-tcg-data/fork )
-2. Create your feature branch (git checkout -b my-new-feature)
-3. Commit your changes (git commit -am 'Add some feature')
-4. Push to the branch (git push origin my-new-feature)
-5. Create a new Pull Request
+| Branch    | Purpose                            |
+| --------- | ---------------------------------- |
+| `main`    | Upstream mirror + fork-owned files |
+| `release` | Stable branch consumed by devices  |
+
+**Devices MUST track `release`, never `main`.**
+
+---
+
+## Remotes
+
+* `origin` → this fork (authoritative distribution point)
+* `upstream` → original Pokémon TCG data repository
+
+Verify:
+
+```bash
+git remote -v
+```
+
+---
+
+## Fork-owned files
+
+The following files are **owned by the fork** and are preserved automatically during syncs:
+
+* `README.md`
+* `sync_upstream.sh`
+
+They must never be edited as part of a normal upstream update.
+
+---
+
+## `sync_upstream` (authoritative update mechanism)
+
+All upstream updates **must** be performed using the `sync_upstream` script.
+
+Manual `git merge`, `git pull`, or ad-hoc resets are forbidden.
+
+### Supported modes
+
+```bash
+./sync_upstream.sh latest
+./sync_upstream.sh <UPSTREAM_COMMIT_SHA>
+./sync_upstream.sh latest --tag <TAG_NAME>
+./sync_upstream.sh <UPSTREAM_COMMIT_SHA> --tag <TAG_NAME>
+```
+
+### What the script does
+
+1. Fetches upstream
+2. Resolves target commit (`latest` or explicit SHA)
+3. Preserves fork-owned files
+4. Hard-resets `main` to the upstream commit
+5. Restores fork-owned files
+6. Commits fork-owned files if needed
+7. Force-pushes `main` safely (`--force-with-lease`)
+8. Creates an **annotated release tag**
+
+---
+
+## Auto-tagging policy
+
+After every successful sync, the script creates an **annotated tag**:
+
+```
+rYYYY-MM-DD
+```
+
+Example:
+
+```bash
+r2026-02-01
+```
+
+### Tag rules
+
+* Tags are **immutable**
+* Tags are never moved or deleted
+* One tag per day per sync
+* If a tag already exists for the day:
+
+  * It must already point to `HEAD`
+  * Otherwise the script aborts
+
+Tags provide:
+
+* Auditability
+* Explicit rollback points
+* CI / manifest integration later
+
+Devices do **not** track tags — they track `release` only.
+
+---
+
+## Typical operational flow
+
+1. Sync upstream into `main`
+
+   ```bash
+   ./sync_upstream.sh latest
+   ```
+
+2. Validate locally (optional)
+
+3. Promote to `release`
+
+   ```bash
+   git checkout release
+   git merge --ff-only origin/main
+   git push origin release
+   ```
+
+4. Devices update automatically
+
+---
+
+## Rollback procedure (devices)
+
+Rollback `release` to a known-good tag or commit:
+
+```bash
+git checkout release
+git reset --hard rYYYY-MM-DD
+git push origin release --force-with-lease
+```
+
+Devices will roll back cleanly on their next update cycle.
+
+---
+
+## Enforcement rules
+
+* `main` **may be force-pushed** (by design)
+* `release` is **never rewritten** except during explicit rollbacks
+* All upstream updates go through `sync_upstream`
+* Fork-owned files are never modified manually during syncs
+
+---
+
+## Rationale
+
+This model provides:
+
+* Zero-merge-conflict upstream tracking
+* Explicit, auditable divergence
+* Deterministic device updates
+* Instant rollbacks
+* CI-friendly history
+
+This README defines the **authoritative workflow** for this fork.
+
+All automation and tooling must follow it.
