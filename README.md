@@ -135,7 +135,17 @@ Devices do **not** track tags — they track `release` only.
 
    ```bash
    git checkout release
+   git fetch origin
    git merge --ff-only origin/main
+   git push origin release
+   ```
+
+   If `git merge --ff-only origin/main` fails with “diverging branches” or “Not possible to fast-forward”, that is **expected** whenever `main` was **force-pushed** during sync (the script rewrites `main`’s history). Your previous `release` tip is then no longer an ancestor of the new `main`. Align `release` to the promoted `main` with a hard reset (same end state as a fast-forward when `release` had no unique commits):
+
+   ```bash
+   git checkout release
+   git fetch origin
+   git reset --hard origin/main
    git push origin release
    ```
 
