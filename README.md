@@ -146,8 +146,10 @@ Devices do **not** track tags — they track `release` only.
    git checkout release
    git fetch origin
    git reset --hard origin/main
-   git push origin release
+   git push origin release --force-with-lease
    ```
+
+   `git push` may be rejected as non-fast-forward: remote `release` can still sit on the **previous** `main` tip, which is not an ancestor of the new one after a force-pushed sync. `--force-with-lease` is then the correct promotion (same idea as rollback, but forward to the new stable tip).
 
 4. Devices update automatically
 
